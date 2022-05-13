@@ -330,12 +330,12 @@ pub fn call<T: ArgumentEncoder, R: for<'a> ArgumentDecoder<'a>>(
     }
 }
 
-/// call with oneway
-pub fn call_oneway<T: ArgumentEncoder>(
+/// call with oneshot
+pub fn call_oneshot<T: ArgumentEncoder>(
     id: Principal,
     method: &str,
     args: T,
-)  {
+) {
     let args_raw = encode_args(args).expect("Failed to encode arguments.");
     // let fut = call_raw(id, method, &args_raw, 0);
     // call_raw_internal(id, method, args_raw, move || {})
@@ -371,6 +371,36 @@ pub fn call_with_payment<T: ArgumentEncoder, R: for<'a> ArgumentDecoder<'a>>(
         let bytes = fut.await?;
         decode_args(&bytes).map_err(|err| trap(&format!("{:?}", err)))
     }
+}
+
+/// Performs an oneshot call to another canister and pay cycles at the same time.
+pub fn call_with_payment_oneshot<T: ArgumentEncoder>(
+    id: Principal,
+    method: &str,
+    args: T,
+    cycles: u64,
+) {
+    let args_raw = encode_args(args).expect("Failed to encode arguments.");
+    // let fut = call_raw(id, method, &args_raw, cycles);
+    // call_raw_internal(id, method, args_raw, payment_func);
+    let callee = id.as_slice();
+    unsafe {
+        ic0::call_new(
+            callee.as_ptr() as i32,
+            callee.len() as i32,
+            method.as_ptr() as i32,
+            method.len() as i32,
+            i32::MAX as usize as i32,
+            i32::MAX as i32,
+            i32::MAX as usize as i32,
+            i32::MAX as i32,
+        );
+
+        ic0::call_data_append(args_raw.as_ptr() as i32, args_raw.len() as i32);
+        ic0::call_cycles_add(cycles as i64);
+        ic0::call_on_cleanup(cleanup as usize as i32, i32::MAX as i32);
+        ic0::call_perform()
+    };
 }
 
 /// Performs an asynchronous call to another canister and pay cycles at the same time.
